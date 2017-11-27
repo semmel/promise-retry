@@ -1,67 +1,105 @@
-var factory = function (createExecutor)
-{
-	return function (settings)
-	{
-		return function (fn)
-		{
-			return function ()
-			{
-				return new Promise(createExecutor(fn, settings));
-			};
-		};
-	};
-};
+/* jshint unused: vars */
 
-var OutOfRetriesError = function (settings, fn, errors)
+(function (root, factory)
 {
-	this.message = 'Maximum retries count reached';
-	this.settings = settings;
-	this.fn = fn;
-	this.errors = errors;
-};
-OutOfRetriesError.prototype = Object.create(Error.prototype);
-
-var promiseRetry = factory(function (fn, settings)
-{
-	var failureCount = 0,
-	    errors       = [];
-	
-	if (!settings || typeof settings.retries !== 'number')
+	if (typeof define === 'function' && define.amd)
 	{
-		throw new Error("settings.retries must be a number");
+		define([], factory);
 	}
-	
-	var getDelay = typeof settings.delay === 'function' ? settings.delay : function ()
+	else if (typeof module === 'object' && module.exports)
 	{
-		return settings.delay;
-	};
-	
-	function executor(resolve, reject)
+		module.exports = factory();
+	}
+	else
 	{
-		return fn()
-		.then(resolve)
-		.catch(function (err)
+		// Browser globals (root is window)
+		root.PromiseRetry = factory();
+	}
+}(typeof self !== 'undefined' ? self : this, function ()
+{
+	// Helper functions //
+	const
+	/**
+		 *
+		 * @param {Number} milliseconds
+		 * @return {Promise}
+		 */
+		delay = function(milliseconds)
 		{
-			errors = errors.concat([err]);
-			failureCount++;
-			if (failureCount > settings.retries)
-			{
-				reject(new OutOfRetriesError(settings, fn, errors));
-			}
-			else
-			{
-				setTimeout(function ()
+			return new Promise(function(resolve)
 				{
-					executor(resolve, reject);
-				}, getDelay(failureCount));
-			}
-		});
-	}
+					setTimeout(resolve, milliseconds);
+				}
+			);
+		};
+		
+	var curry = function(fn) { return fn; };
 	
-	return executor;
-});
+	const setCurryFunction = function(fn) { curry = fn; };
+	
+	const retry = curry(
+		/**
+		 *
+		 * @param {Object} settings
+		 * @param {Number|function({error: Error, retriesDone: Number}): Number} settings.delay
+		 * @param {Number} settings.retries
+		 * @param {function(Error): Boolean} [settings.isRetryable]
+		 * @param {function(...*): Promise} creator
+		 * @return {function(...*): Promise}
+		 */
+		function promiseRetry(settings, creator)
+		{
+			if (!settings || typeof settings.retries !== 'number')
+			{
+				throw new Error("settings.retries must be a number");
+			}
+			
+			const
+				getDelay = typeof settings.delay === 'function' ?
+					settings.delay :
+					function ()
+					{
+						return settings.delay || 0;
+					},
+			
+				shouldContinue = typeof settings.isRetryable === 'function' ?
+					settings.isRetryable :
+					function(error)
+					{
+						return true;
+					};
+			
+			return function beginInvoking()
+			{
+				const args = arguments;
+				
+				var failureCount = 0;
+				
+				const tryCreating = function()
+				{
+					return creator.apply(undefined, args)
+					.catch(function(error)
+					{
+						failureCount++;
+						if (failureCount > settings.retries || !shouldContinue(error))
+						{
+							throw error;
+						}
+						
+						return delay(getDelay({error: error, retriesDone: failureCount}))
+						.then(tryCreating);
+					});
+				};
+				
+				return tryCreating();
+			};
+		}
+	);
+	
+	return {
+		retry: retry,
+		setCurryFunction: setCurryFunction
+	};
+	
+}));
 
-
-promiseRetry.OutOfRetriesError = OutOfRetriesError;
-
-module.exports = promiseRetry;
