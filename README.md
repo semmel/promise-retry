@@ -1,45 +1,57 @@
-# promise-retry [![Build Status](https://travis-ci.org/songkick/promise-retry.svg)](https://travis-ci.org/songkick/promise-retry) [![Code Climate](https://codeclimate.com/github/songkick/promise-retry/badges/gpa.svg)](https://codeclimate.com/github/songkick/promise-retry) [![Test Coverage](https://codeclimate.com/github/songkick/promise-retry/badges/coverage.svg)](https://codeclimate.com/github/songkick/promise-retry/coverage)
+# promise-retry
 
-Retry a function until its returned promise succeeds
+Retry a function until its returned promise succeeds. The api should be close to [Bacon.retry](http://baconjs.github.io/api.html#bacon-retry) except that here a promise with just a single final value is returned instead of creating an event stream. 
 
 ```js
-var retryPromise = require('@songkick/promise-retry');
+var retryPromise = require('@semmel/promise-retry');
 var retryTwiceEveryHundredMil = retryPromise({ retries: 2, delay: 100 });
 
-retryTwiceEveryHundredMil(resolvesTheThirdTime)()
-  .then(function(result){
-    // never called here,
-    // but if `retries` was >= 3,
-    // result would be === 'yay!'
-  }).catch(function(err){
-    // err instanceof retryPromise.OutOfRetriesError === true
-    // err === {
-    //   message: 'Maximum retries count reached',
-    //   settings: {
-    //     retries: 2,
-    //   },
-    //   fn: resolvesTheThirdTime,
-    //   errors: ['nope', 'nope', 'nope']
-    // }
-  });
-
 var calls = 0;
-function resolvesTheThirdTime() {
-  if (++calls < 3) {
-    return Promise.reject('nope');
+function resolvesTheForthTime() {
+  if (++calls < 4) {
+    return Promise.reject(new Error('nope'));
   } else {
     return Promise.resolve('yay!');
   }
 }
+
+var tryFnTwiceEveryHundredMil = retryTwiceEveryHundredMil(resolvesTheForthTime);
+
+tryFnTwiceEveryHundredMil()
+  .then(function(result){
+    // never called here,
+    // but if `retries` was >= 3,
+    // result would be === 'yay!'
+    console.log("success with " + result);
+  }).catch(function(err){
+    // err instanceof Error === true
+    // err.message === 'nope'
+    console.error("failed with " + err.message);
+  });
+
+// do it again (i.e. tries no. 3 and 4)
+tryFnTwiceEveryHundredMil()
+.then(function(result){
+    // result  === 'yay!'
+  },
+  function(error)
+  {
+  	// never reached
+  });
 ```
 
 ## Options
 
 `retries`: positive (>= 0) number. The initial call doesn't count as a retry. If you set it to `3`, then your function might be called up to 4 times.
 
-`delay`: the delay between retries or a `function(retryIndex){}` returning the delay. Does not apply on initial call. If a function is passed, it will receive the retry index as first argument (`1, 2, 3 ...`).
+`delay`: the delay between retries or a `function(context){}` returning the delay. Does not apply on initial call. If a function is passed, it will receive a context object with the retry index as `retriesDone` field (`1, 2, 3 ...`) and the current error object as `error` field.
+
+`isRetryable`: a function returning true to continue retrying, false to stop. Defaults to true. The error that occurred is given as a parameter. For example, there is usually no reason to retry a 404 HTTP error, whereas a 500 or a timeout might work on the next attempt.
+
 
 ### Example:
+
+see also [demo.js](demo.js)
 
 ```js
 var retryWithIncreasingDelay = retryPromise({ retries: 10, delay: function(retryIndex) {
@@ -62,12 +74,12 @@ As `promise-retry` input and output is a function returning a promise, you can c
 
 ```js
 var retryTwice = retryPromise({ retries: 2 });
-var retryAterTwoSeconds = retryPromise({ retries: 1, delay: 2000 });
+var retryOnceAfterTwoSeconds = retryPromise({ retries: 1, delay: 2000 });
 var getRejected = function(){
   return Promise.reject('nope');
 };
 
-retryOnceAterTwoSeconds(retryTwice(getRejected))().then(function(){
+retryOnceAfterTwoSeconds(retryTwice(getRejected))().then(function(){
   // no way here
 }).catch(function(){
   // at this point, `getRejected` will have been called 6 times

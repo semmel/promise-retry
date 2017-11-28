@@ -4,18 +4,18 @@
 {
 	if (typeof define === 'function' && define.amd)
 	{
-		define([], factory);
+		define(['ramda'], factory);
 	}
 	else if (typeof module === 'object' && module.exports)
 	{
-		module.exports = factory();
+		module.exports = factory(require('ramda'));
 	}
 	else
 	{
 		// Browser globals (root is window)
-		root.PromiseRetry = factory();
+		root.retryPromise = factory(root.R);
 	}
-}(typeof self !== 'undefined' ? self : this, function ()
+}(typeof self !== 'undefined' ? self : this, function (R)
 {
 	// Helper functions //
 	const
@@ -32,12 +32,8 @@
 				}
 			);
 		};
-		
-	var curry = function(fn) { return fn; };
 	
-	const setCurryFunction = function(fn) { curry = fn; };
-	
-	const retry = curry(
+	const retry = R.curry(
 		/**
 		 *
 		 * @param {Object} settings
@@ -96,10 +92,7 @@
 		}
 	);
 	
-	return {
-		retry: retry,
-		setCurryFunction: setCurryFunction
-	};
+	return retry;
 	
 }));
 
