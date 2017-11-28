@@ -1,9 +1,12 @@
 # promise-retry
 
-Retry a function until its returned promise succeeds. The api should be close to [Bacon.retry](http://baconjs.github.io/api.html#bacon-retry) except that here a promise with just a single final value is returned instead of creating an event stream. 
+Retry a function until its returned promise succeeds. 
+
+The api is like [Bacon.retry](http://baconjs.github.io/api.html#bacon-retry) except that here a promise with just a single final value is returned instead of creating an event stream. 
 
 ```js
-var retryPromise = require('@semmel/promise-retry');
+var R = require('ramda');
+var retryPromise = require('promise-retry');
 var retryTwiceEveryHundredMil = retryPromise({ retries: 2, delay: 100 });
 
 var calls = 0;
@@ -29,7 +32,7 @@ tryFnTwiceEveryHundredMil()
     console.error("failed with " + err.message);
   });
 
-// do it again (i.e. tries no. 3 and 4)
+// do it again (i.e. tries no. 3, 4 and 5)
 tryFnTwiceEveryHundredMil()
 .then(function(result){
     // result  === 'yay!'
